@@ -1,7 +1,6 @@
 ### Required Libraries ###
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
-
 ### Functionality Helper Functions ###
 def parse_int(n):
     """
@@ -11,35 +10,27 @@ def parse_int(n):
         return int(n)
     except ValueError:
         return float("nan")
-
-
 def build_validation_result(is_valid, violated_slot, message_content):
     """
     Define a result message structured as Lex response.
     """
     if message_content is None:
         return {"isValid": is_valid, "violatedSlot": violated_slot}
-
     return {
         "isValid": is_valid,
         "violatedSlot": violated_slot,
         "message": {"contentType": "PlainText", "content": message_content},
     }
-
-
 ### Dialog Actions Helper Functions ###
 def get_slots(intent_request):
     """
     Fetch all the slots and their values from the current intent.
     """
     return intent_request["currentIntent"]["slots"]
-
-
 def elicit_slot(session_attributes, intent_name, slots, slot_to_elicit, message):
     """
     Defines an elicit slot type response.
     """
-
     return {
         "sessionAttributes": session_attributes,
         "dialogAction": {
@@ -50,24 +41,18 @@ def elicit_slot(session_attributes, intent_name, slots, slot_to_elicit, message)
             "message": message,
         },
     }
-
-
 def delegate(session_attributes, slots):
     """
     Defines a delegate slot type response.
     """
-
     return {
         "sessionAttributes": session_attributes,
         "dialogAction": {"type": "Delegate", "slots": slots},
     }
-
-
 def close(session_attributes, fulfillment_state, message):
     """
     Defines a close slot type response.
     """
-
     response = {
         "sessionAttributes": session_attributes,
         "dialogAction": {
@@ -76,65 +61,7 @@ def close(session_attributes, fulfillment_state, message):
             "message": message,
         },
     }
-
     return response
-
-
-#-------------------------------------------------------------------
-
-def validate_data(age, investment_amount, intent_request):
-    """
-    Validates the data provided by the user.
-    """
-    # Validate the retirement age based on the user's current age.
-    # An retirement age of 65 years is considered by default.
-    if age is not None:
-        age = parse_int(
-            age
-        )  # Since parameters are strings it's important to cast values
-        if age < 0:
-            return build_validation_result(
-                False,
-                "age",
-                "Your age is invalid, can you provide an age greater than zero?",
-            )
-        elif age >= 65:
-            return build_validation_result(
-                False,
-                "age",
-                "The maximum age to contract this service is 64, "
-                "can you provide an age between 0 and 64 please?",
-            )
-    # Validate the investment amount, it should be >= 5000
-    if investment_amount is not None:
-        investment_amount = parse_int(investment_amount)
-        if investment_amount < 5000:
-            return build_validation_result(
-                False,
-                "investmentAmount",
-                "The minimum investment amount is $5,000 USD, "
-                "could you please provide a greater amount?",
-            )
-    return build_validation_result(True, None, None)
-
-#-------------------------------------------------------------------
-
-def get_investment_recommendation(risk_level):
-    """
-    Returns an initial investment recommendation based on the risk profile.
-    """
-    risk_levels = {
-        "none": "100% bonds (AGG), 0% equities (SPY)",
-        "very low": "80% bonds (AGG), 20% equities (SPY)",
-        "low": "60% bonds (AGG), 40% equities (SPY)",
-        "medium": "40% bonds (AGG), 60% equities (SPY)",
-        "high": "20% bonds (AGG), 80% equities (SPY)",
-        "very high": "0% bonds (AGG), 100% equities (SPY)",
-    }
-    return risk_levels[risk_level.lower()]
-
-#-------------------------------------------------------------------
-
 ### Intents Handlers ###
 def recommend_portfolio(intent_request):
     """
@@ -149,23 +76,41 @@ def recommend_portfolio(intent_request):
         # Perform basic validation on the supplied input slots.
         # Use the elicitSlot dialog action to re-prompt
         # for the first violation detected.
-        slots = get_slots(intent_request)
-        validation_result = validate_data(age, investment_amount, intent_request)
-        if not validation_result["isValid"]:
-            slots[validation_result["violatedSlot"]] = None  # Cleans invalid slot
-            # Returns an elicitSlot dialog to request new data for the invalid slot
-            return elicit_slot(
-                intent_request["sessionAttributes"],
-                intent_request["currentIntent"]["name"],
-                slots,
-                validation_result["violatedSlot"],
-                validation_result["message"],
-            )
+# ------------------------------------------------------------------------------------        
+        ### DATA VALIDATION CODE STARTS HERE ###
+        # Validate that the user is between 0 and 65 years old
+        if age is not None:
+            age = parse_int(age)
+            if age <= 0 or age >= 65:
+                return build_validation_result(
+                    False,
+                    "age",
+                    "Not a valid age. You must be between 0 and 65 years old to use this service, please provide a valid age.",)
+        # Validate the investment amount, it should be >= 5000
+        if investment_amount is not None:
+            investment_amount = parse_int(investment_amount)
+            if investment_amount < 5000:
+                return build_validation_result(
+                    False,
+                    "investment_amount",
+                    "The amount to invest must be greater than or equal to 5,000, please provide a valid amount to invest.",)
+# ------------------------------------------------------------------------------------
         # Fetch current session attibutes
         output_session_attributes = intent_request["sessionAttributes"]
         return delegate(output_session_attributes, get_slots(intent_request))
+# ------------------------------------------------------------------------------------
     # Get the initial investment recommendation
-    initial_recommendation = get_investment_recommendation(risk_level)
+    risks = {"None": "100% bonds (AGG), 0% equities (SPY)",
+             "Small": "80% bonds (AGG), 20% equities (SPY)", 
+             "Low": "60% bonds (AGG), 40% equities (SPY)", 
+             "Medium": "40% bonds (AGG), 60% equities (SPY)", 
+             "High": "20% bonds (AGG), 80% equities (SPY)", 
+             "Aggressive": "0% bonds (AGG), 100% equities (SPY)"}
+    # Create comprehension to pull correct values for given risk
+    recommend = str({v for (k, v) in risks.items() if k in risk_level})
+    # Create initial recommendation dialog based on risk level provided
+    initial_recommendation = recommend[2:-2]
+# ------------------------------------------------------------------------------------
     # Return a message with the initial recommendation based on the risk level.
     return close(
         intent_request["sessionAttributes"],
@@ -179,28 +124,20 @@ def recommend_portfolio(intent_request):
             ),
         },
     )
-
-
 ### Intents Dispatcher ###
 def dispatch(intent_request):
     """
     Called when the user specifies an intent for this bot.
     """
-
     intent_name = intent_request["currentIntent"]["name"]
-
     # Dispatch to bot's intent handlers
     if intent_name == "RecommendPortfolio":
         return recommend_portfolio(intent_request)
-
     raise Exception("Intent with name " + intent_name + " not supported")
-
-
 ### Main Handler ###
 def lambda_handler(event, context):
     """
     Route the incoming request based on intent.
     The JSON body of the request is provided in the event slot.
     """
-
     return dispatch(event)
